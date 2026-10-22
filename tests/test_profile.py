@@ -1,4 +1,6 @@
 import sys
+import re
+import xml.etree.ElementTree as ET
 import unittest
 from datetime import date
 from pathlib import Path
@@ -35,6 +37,24 @@ class CalendarTests(unittest.TestCase):
         self.assertEqual((summary["currentStart"], summary["currentEnd"]), ("2026-01-04", "2026-01-06"))
         self.assertEqual(summary["total"], 15)
         self.assertEqual(summarize(days + [{"date": "2026-01-08", "count": 0}])["currentStreak"], 0)
+
+
+class ArtworkLayoutTests(unittest.TestCase):
+    def test_picture_sources_keep_the_same_scale(self):
+        # GitHub can override theme media conditions for a signed-in theme.
+        # Every selectable source must be safe at the fallback display width.
+        root = Path(__file__).resolve().parents[1]
+        for fragment in re.findall(r"<picture>.*?</picture>", (root / "README.md").read_text(), re.S):
+            picture = ET.fromstring(re.sub(r"<(source|img)([^>]*?)/?>", lambda m: "<" + m[1] + m[2] + "/>", fragment))
+            fallback = picture.find("img")
+            displayed = float(fallback.attrib["width"])
+            base = ET.parse(root / fallback.attrib["src"]).getroot()
+            ratio = float(base.attrib["width"]) / float(base.attrib["height"])
+            for source in picture.findall("source"):
+                art = ET.parse(root / source.attrib["srcset"]).getroot()
+                with self.subTest(source=source.attrib["srcset"]):
+                    self.assertGreaterEqual(float(art.attrib["width"]), displayed)
+                    self.assertAlmostEqual(float(art.attrib["width"]) / float(art.attrib["height"]), ratio)
 
 
 if __name__ == "__main__":

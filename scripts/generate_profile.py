@@ -118,82 +118,83 @@ def svg(w, h, body, theme, styles=""):
 <style>:root{{{tokens}}}text{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,"PingFang SC",sans-serif}}{styles}</style>{body}</svg>'''
 
 
-def render_header(theme, mobile=False):
-    w, h = (360, 196) if mobile else (788, 214)
+def render_header(theme):
+    w, h = 788, 214
     art = (ROOT / "scripts/header-art.svg").read_text()
     art = re.sub(r"^<svg[^>]*>|</svg>$", "", art.strip())
-    if mobile:
-        art = re.sub(r'<g class="wing".*?</g>', '', art, flags=re.S)
-        art = f'<g transform="translate(-208,55) scale(.7)">{art}</g>'
-    x, y, size = (20, 59, 34) if mobile else (29, 72, 49)
-    title = text(x, y, "Momoyeyu", size, extra='font-weight="600" letter-spacing="-2"')
-    title += text(x, y + 30, "墨末夜羽", 13, "#7188a2", extra='letter-spacing="4"')
-    title += text(x if mobile else x + 116, y + (49 if mobile else 30), "AI Systems Engineer", 10 if mobile else 12, "#748ba3")
-    title += text(x, y + (78 if mobile else 97), "Making intelligence work efficiently.", 9 if mobile else 12, "#748ba3")
+    x, y, size = 29, 72, 38
+    title = text(x, y, "Momoyeyu", size, extra='class="header-name" font-weight="600" letter-spacing="-1"')
+    title += text(x, y + 30, "墨末夜羽", 13, "#7188a2", extra='class="header-alias" letter-spacing="4"')
+    title += text(x + 116, y + 30, "AI Systems Engineer", 12, "#748ba3", extra='class="header-role"')
+    title += text(x, y + 97, "Making intelligence work efficiently.", 12, "#748ba3", extra='class="header-tagline"')
     for offset, width, color in [(0, 20, "#aec0d3"), (25, 11, "#c0b5cb"), (41, 6, "#d6b67c")]:
-        title += box(x + offset, y + (91 if mobile else 115), width, 3, color, "none", 0)
+        title += box(x + offset, y + 115, width, 3, color, "none", 0)
     styles = '''.flurry{animation:snow 8s linear infinite}.two{animation-delay:-3s}.three{animation-delay:-6s}.wing{transform-origin:600px 40px;animation:wing 9s ease-in-out infinite}.window-light{animation:glow 9s ease-in-out infinite}@keyframes snow{0%{transform:translate(0,-7px);opacity:0}20%,70%{opacity:.9}100%{transform:translate(-5px,15px);opacity:0}}@keyframes wing{50%{transform:translateY(-2px) rotate(-2deg)}}@keyframes glow{50%{opacity:.65}}@media(prefers-reduced-motion:reduce){*{animation:none!important}}'''
+    styles += '@media(max-width:480px){.header-name{font-size:54px}.header-alias{font-size:21px}.header-role{font-size:20px}.header-tagline{font-size:19px}.wing{display:none}}'
     if theme == "dark":
         styles += '.scene-ground{fill:#30445a}'
     return svg(w, h, box(.5, .5, w-1, h-1, "var(--wash)") + '<g fill="none">' + art + '</g>' + title, theme, styles)
 
 
-def render_focus(theme, mobile=False):
-    w, h = (360, 138) if mobile else (788, 80)
+def render_focus(theme):
+    w, h = 788, 80
     body = f'<path d="M0 .5H{w}M0 {h-.5}H{w}" stroke="var(--line)"/>'
     lanes = [("Agent Harness", "tools / context / evaluation", "#7e9bb9"), ("AI Infra", "serving / efficiency / scale", "#98a597"), ("Post-training", "SFT / RL / alignment", "#aa9fba")]
     for i, (name, detail, color) in enumerate(lanes):
-        x, y = (0, 27+i*43) if mobile else (i*w/3 + (17 if i else 0), 33)
-        if i and not mobile:
+        x, y = (i*w/3 + (17 if i else 0), 33)
+        if i:
             body += f'<path d="M{i*w/3} 17V63" stroke="var(--line)"/>'
         body += box(x, y-9, 8, 8, "none", color, 1)
-        body += text(x+19, y, name, 12 if mobile else 13, extra='font-weight="600"')
-        body += text(w-2 if mobile else x, y if mobile else y+24, detail, 8.5 if mobile else 10, "var(--muted)", "end" if mobile else None)
-    return svg(w, h, body, theme)
+        body += text(x+19, y, name, 13, extra='class="focus-name" font-weight="600"')
+        body += text(x, y+24, detail, 10, "var(--muted)", None, extra='class="focus-detail"')
+    return svg(w, h, body, theme, '@media(max-width:480px){.focus-name{font-size:22px}.focus-detail{display:none}}')
 
 
-def render_tools(theme, mobile=False):
-    tools = [("Py", "Python"), ("++", "C++"), ("Go", "Go"), ("◒", "PyTorch"), ("λ", "Linux"), ("▤", "Docker"), ("◇", "Git")]
-    body, x, y = "", 0, 2
-    for mark, label in tools:
-        width = 35 + len(label)*5.5
-        if mobile and x+width > 360:
-            x, y = 0, 32
-        body += box(x+.5, y, width, 23, "var(--paper)", radius=4)
-        body += box(x+5, y+4, 15, 15, "var(--wash)", "none", 3)
-        body += text(x+12.5, y+15, mark, 9, "#718ca8", "middle", 'font-weight="600"')
-        body += text(x+25, y+15, label, 10, "var(--muted)")
-        x += width+7
-    return svg(360 if mobile else 788, 58 if mobile else 29, body, theme)
+TOOLS = [("python", "Py", "Python"), ("cpp", "++", "C++"), ("go", "Go", "Go"), ("pytorch", "◒", "PyTorch"), ("linux", "λ", "Linux"), ("docker", "▤", "Docker"), ("git", "◇", "Git")]
 
 
-def render_stats(data, theme, mobile=False):
-    w, h = (360, 178) if mobile else (788, 183)
+def tool_width(label):
+    return int(35 + len(label)*6)
+
+
+def render_tool(theme, mark, label):
+    w = tool_width(label)
+    body = box(.5, .5, w-1, 25, "var(--paper)", radius=4)
+    body += box(5, 5, 15, 15, "var(--wash)", "none", 3)
+    body += text(12.5, 16, mark, 9, "#718ca8", "middle", 'font-weight="600"')
+    body += text(25, 16, label, 10, "var(--muted)")
+    return svg(w, 27, body, theme)
+
+
+def render_stats(data, theme):
+    w, h = 788, 183
     s, year = data["summary"], data["asOf"][:4]
     as_of = date.fromisoformat(data["asOf"])
-    body = text(0, 15, "On GitHub", 13, extra='font-weight="600"') + text(w, 15, f"{year} · 截至 {as_of.month:02d}/{as_of.day:02d}", 8 if mobile else 10, "var(--muted)", "end")
+    body = text(0, 15, "On GitHub", 13, extra='class="stats-heading" font-weight="600"') + text(w, 15, f"{year} · 截至 {as_of.month:02d}/{as_of.day:02d}", 10, "var(--muted)", "end", extra='class="stats-date"')
     body += box(.5, 30.5, w-1, h-31, "var(--paper)")
     centers = [w/6, w/2, w*5/6]
     for x in [w/3, w*2/3]:
         body += f'<path d="M{x} 51V{h-23}" stroke="var(--line)"/>'
     for x, value, label, foot in [(centers[0], f'{s["total"]:,}', "Contributions", year), (centers[2], s["longestStreak"], "Longest streak", "in "+year)]:
-        body += text(x, 107, value, 27 if mobile else 31, anchor="middle")
-        body += text(x, 132, label, 9 if mobile else 11, "var(--muted)", "middle")
-        body += text(x, 151, foot, 8 if mobile else 9, "var(--muted)", "middle")
+        body += text(x, 107, value, 24, anchor="middle", extra='class="stat-value"')
+        body += text(x, 132, label, 11, "var(--muted)", "middle", extra='class="stat-label"')
+        body += text(x, 151, foot, 9, "var(--muted)", "middle", extra='class="stat-foot"')
     x = centers[0]
     body += f'<g stroke="#99adc2" fill="none" stroke-width="1.2" transform="translate({x-7},55)"><rect width="5" height="5" rx="1"/><rect x="8" width="5" height="5" rx="1"/><rect y="8" width="5" height="5" rx="1"/><rect x="8" y="8" width="5" height="5" rx="1"/></g>'
     x = centers[2]
     body += f'<path d="M{x-3} 55H{x+3}V59C{x+3} 64 {x-3} 64 {x-3} 59ZM{x-3} 56H{x-6}V58C{x-6} 61 {x-3} 61 {x-3} 61M{x+3} 56H{x+6}V58C{x+6} 61 {x+3} 61 {x+3} 61M{x} 63V67M{x-3} 67H{x+3}" stroke="#99adc2" fill="none" stroke-width="1.2"/>'
     cx = centers[1]
     body += f'<circle cx="{cx}" cy="91" r="29" fill="none" stroke="#94aac4" stroke-width="2"/><rect x="{cx-32}" y="88" width="6" height="6" rx="1" fill="#d6b67c" stroke="var(--paper)" stroke-width="2"/>'
-    body += text(cx, 101, s["currentStreak"], 27, anchor="middle") + text(cx, 132, "Current streak", 9 if mobile else 11, "#6582a1", "middle")
+    body += text(cx, 99, s["currentStreak"], 24, anchor="middle", extra='class="stat-value"') + text(cx, 132, "Current streak", 11, "#6582a1", "middle", extra='class="stat-label"')
     if s["currentStart"]:
         start, end = map(date.fromisoformat, [s["currentStart"], s["currentEnd"]])
         span = f"{calendar.month_abbr[start.month]} {start.day:02d} – {calendar.month_abbr[end.month]} {end.day:02d}"
     else:
         span = "No active streak"
-    body += text(cx, 151, span, 7 if mobile else 9, "var(--muted)", "middle")
-    return svg(w, h, body, theme)
+    body += text(cx, 151, span, 9, "var(--muted)", "middle", extra='class="stat-foot"')
+    # These queries use the SVG image's rendered viewport, not the page viewport.
+    styles = '@media(max-width:480px){.stat-value{font-size:40px}.stat-label{font-size:21px}.stat-foot{font-size:16px}.stats-heading{font-size:22px}.stats-date{display:none}}'
+    return svg(w, h, body, theme, styles)
 
 
 def render_snake(data, theme):
@@ -242,11 +243,10 @@ def write_assets(data):
     dest = ROOT / "assets"
     dest.mkdir(exist_ok=True)
     for theme in PALETTES:
-        for mobile in [False, True]:
-            suffix = f'{theme}{"-mobile" if mobile else ""}.svg'
-            for name, value in [("header", render_header(theme, mobile)), ("focus", render_focus(theme, mobile)), ("tools", render_tools(theme, mobile)), ("stats", render_stats(data, theme, mobile))]:
-                (dest / f'{name}-{suffix}').write_text(value+'\n')
-        (dest / f'snake-{theme}.svg').write_text(render_snake(data, theme)+'\n')
+        for name, value in [("header", render_header(theme)), ("focus", render_focus(theme)), ("stats", render_stats(data, theme)), ("snake", render_snake(data, theme))]:
+            (dest / f'{name}-{theme}.svg').write_text(value+'\n')
+        for slug, mark, label in TOOLS:
+            (dest / f'tool-{slug}-{theme}.svg').write_text(render_tool(theme, mark, label)+'\n')
 
 
 def main():
