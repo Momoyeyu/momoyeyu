@@ -1,0 +1,41 @@
+import sys
+import unittest
+from datetime import date
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from generate_profile import CalendarParser, summarize
+
+
+class CalendarTests(unittest.TestCase):
+    def test_future_dates_and_formatted_counts(self):
+        parser = CalendarParser()
+        parser.feed('''<td id="a" data-date="2026-01-01" data-level="4"></td>
+        <tool-tip for="a">1,234 contributions on January 1st.</tool-tip>
+        <td id="b" data-date="2026-01-02" data-level="0"></td>
+        <tool-tip for="b">No contributions on January 2nd.</tool-tip>''')
+        self.assertEqual(parser.days(date(2026, 1, 1)), [{"date": "2026-01-01", "level": 4, "count": 1234}])
+
+    def test_missing_tooltip_is_not_silently_zero(self):
+        parser = CalendarParser()
+        parser.feed('<td id="a" data-date="2026-01-01" data-level="0"></td>')
+        with self.assertRaises(ValueError):
+            parser.days(date(2026, 1, 1))
+
+    def test_missing_calendar_date_is_rejected(self):
+        parser = CalendarParser()
+        parser.feed('<td id="a" data-date="2026-01-02" data-level="0"></td><tool-tip for="a">No contributions on January 2nd.</tool-tip>')
+        with self.assertRaises(ValueError):
+            parser.days(date(2026, 1, 2))
+
+    def test_unfinished_day_preserves_yesterday_streak(self):
+        days = [{"date": f"2026-01-{i:02d}", "count": n} for i,n in enumerate([1, 2, 0, 3, 4, 5, 0], 1)]
+        summary = summarize(days)
+        self.assertEqual((summary["currentStreak"], summary["longestStreak"]), (3, 3))
+        self.assertEqual((summary["currentStart"], summary["currentEnd"]), ("2026-01-04", "2026-01-06"))
+        self.assertEqual(summary["total"], 15)
+        self.assertEqual(summarize(days + [{"date": "2026-01-08", "count": 0}])["currentStreak"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
