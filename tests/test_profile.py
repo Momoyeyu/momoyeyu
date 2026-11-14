@@ -2,11 +2,11 @@ import sys
 import re
 import xml.etree.ElementTree as ET
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from generate_profile import CalendarParser, summarize
+from generate_profile import CalendarParser, render_snake, summarize
 
 
 class CalendarTests(unittest.TestCase):
@@ -55,6 +55,60 @@ class ArtworkLayoutTests(unittest.TestCase):
                 with self.subTest(source=source.attrib["srcset"]):
                     self.assertGreaterEqual(float(art.attrib["width"]), displayed)
                     self.assertAlmostEqual(float(art.attrib["width"]) / float(art.attrib["height"]), ratio)
+
+
+class SnakeAnimationTests(unittest.TestCase):
+    def test_contributions_dim_at_head_arrival_and_reset_after_tail(self):
+        first = date(2026, 1, 1)
+        days = [dict(date=(first + timedelta(days=i)).isoformat(), count=int(i != 2), level=int(i != 2))
+                for i in range(14)]
+        ns = {"svg": "http://www.w3.org/2000/svg"}
+
+        for theme in ("light", "dark"):
+            with self.subTest(theme=theme):
+                art = ET.fromstring(render_snake({"days": days}, theme))
+                snake = art.find('svg:g[@class="snake"]', ns)
+                self.assertIsNotNone(snake)
+                motions = snake.findall("svg:rect/svg:animateMotion", ns)
+                self.assertEqual(len(motions), 7)
+                head = motions[-1]
+                route_id = head.find("svg:mpath", ns).attrib["href"][1:]
+                path = art.find(f'.//svg:path[@id="{route_id}"]', ns)
+                points = [(int(x), int(y)) for x, y in re.findall(r"(-?\d+),(-?\d+)", path.attrib["d"])]
+                self.assertTrue(all(abs(x - nx) + abs(y - ny) == 1
+                                    for (x, y), (nx, ny) in zip(points, points[1:])))
+                _, head_start, head_end, _ = map(float, head.attrib["keyTimes"].split(";"))
+                tail_end = head_end
+                for motion in reversed(motions[:-1]):
+                    _, start, end, _ = map(float, motion.attrib["keyTimes"].split(";"))
+                    self.assertGreater(end, tail_end)
+                    self.assertAlmostEqual(end - start, head_end - head_start, places=7)
+                    tail_end = end
+
+                tx, ty, step = map(float, re.findall(r"[\d.]+", snake.attrib["transform"]))
+                cells = art.findall('svg:rect[@class="contribution"]', ns)
+                self.assertEqual(len(cells), len(days))
+                for day, rect in zip(days, cells):
+                    with self.subTest(day=day["date"]):
+                        x, y, size = (float(rect.attrib[attr]) for attr in ("x", "y", "width"))
+                        col, row = (x + size/2 - tx)/step, (y + size/2 - ty)/step
+                        self.assertAlmostEqual(col, round(col), places=3)
+                        self.assertAlmostEqual(row, round(row), places=3)
+                        progress = points.index((round(col), round(row))) / (len(points) - 1)
+                        anim = rect.find('svg:animate[@attributeName="opacity"]', ns)
+                        if not day["count"]:
+                            self.assertIsNone(anim)
+                            continue
+                        arrive = head_start + progress * (head_end - head_start)
+                        _, dim, dimmed, restore, restored, _ = map(float, anim.attrib["keyTimes"].split(";"))
+                        self.assertAlmostEqual(dim, arrive, places=7)
+                        self.assertLess(dim, dimmed)
+                        self.assertLess(dimmed, restore)
+                        self.assertGreaterEqual(restore, tail_end)
+                        self.assertLess(restore, restored)
+                        self.assertLess(restored, 1)
+                        for attr in ("dur", "repeatCount", "begin"):
+                            self.assertEqual(anim.get(attr), head.get(attr))
 
 
 if __name__ == "__main__":

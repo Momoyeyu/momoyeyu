@@ -197,45 +197,73 @@ def render_stats(data, theme):
     return svg(w, h, body, theme, styles)
 
 
+def key_times(*times):
+    return ';'.join(f'{t:.9f}'.rstrip('0').rstrip('.') for t in times)
+
+
 def render_snake(data, theme):
     w, h, x0, y0 = 788, 225, 50, 65
     days = data["days"]
     first = date.fromisoformat(days[0]["date"])
-    origin = first - timedelta(days=(first.weekday()+1) % 7)
+    first_row = (first.weekday()+1) % 7
+    origin = first - timedelta(days=first_row)
     last = date.fromisoformat(days[-1]["date"])
-    weeks = (last-origin).days//7+1
+    last_col, last_row = divmod((last-origin).days, 7)
+    weeks = last_col+1
     step = min(16, (w-90)/weeks)
     cell = step*.75
+
+    points = [(col, 6-j if col % 2 else j) for col in range(weeks) for j in range(7)]
+    end = points.index((last_col, 0 if last_col % 2 else last_row))
+    points = [(-1, first_row), *points[first_row:end+1], (weeks, points[end][1])]
+    path = 'M'+' L'.join(f'{x},{y}' for x,y in points)
+    point_index = {point: i for i, point in enumerate(points)}
+    segments, spacing = 7, .6
+    head_start, tail_end = .02, .92
+    steps = len(points)-1
+    step_time = (tail_end-head_start)/(steps+(segments-1)*spacing)
+    duration = min(34, max(3, .11*steps))
+    clock = f'dur="{duration:g}s" repeatCount="indefinite"'
+
     body = box(.5, .5, w-1, h-1, "var(--wash)")
     body += box(21, 24, 5, 5, "#d6b67c", "none", 1) + text(32, 30, "Contribution trail", 11)
     body += text(w-21, 30, f"Jan 01 — {calendar.month_abbr[last.month]} {last.day:02d}, {last.year}", 9, "var(--muted)", "end")
-    styles = ''
     month = None
-    for i, day in enumerate(days):
+    for day in days:
         d = date.fromisoformat(day["date"])
         col, row = divmod((d-origin).days, 7)
         x, y = x0+col*step, y0+row*step
-        eat = (col*7+(6-row if col % 2 else row))/(weeks*7)*100
-        anim = f' style="animation:eat{i} 34s linear infinite"' if day["count"] else ''
-        body += f'<rect x="{x:.2f}" y="{y:.2f}" width="{cell:.2f}" height="{cell:.2f}" rx="2" fill="{PALETTES[theme]["cells"][day["level"]]}"{anim}><title>{day["date"]}: {day["count"]} contributions</title></rect>'
+        body += f'<rect class="contribution" x="{x:.2f}" y="{y:.2f}" width="{cell:.2f}" height="{cell:.2f}" rx="2" fill="{PALETTES[theme]["cells"][day["level"]]}"><title>{day["date"]}: {day["count"]} contributions</title>'
         if day["count"]:
-            styles += f'@keyframes eat{i}{{0%,{max(0,eat-.12):.3f}%{{opacity:1}}{eat+.12:.3f}%,91%{{opacity:.17}}100%{{opacity:1}}}}'
+            arrive = head_start+point_index[col, row]*step_time
+            times = key_times(0, arrive, arrive+.3*step_time, .94, .98, 1)
+            body += f'<animate attributeName="opacity" {clock} values="1;1;.17;.17;1;1" keyTimes="{times}"/>'
+        body += '</rect>'
         if d.month != month:
             month = d.month
             body += text(x, 53, calendar.month_abbr[month], 9, "var(--muted)")
     for label, row in [("M", 1), ("W", 3), ("F", 5)]:
         body += text(27, y0+row*step+9, label, 8, "var(--muted)")
-    points = [(x0+col*step+cell/2, y0+(6-j if col % 2 else j)*step+cell/2) for col in range(weeks) for j in range(7)]
-    path = 'M'+' L'.join(f'{x:.2f},{y:.2f}' for x,y in points)
-    for i in range(6, -1, -1):
+
+    body += f'<defs><path id="snake-route" d="{path}"/></defs>'
+    body += f'<g class="snake" transform="translate({x0+cell/2:.6f},{y0+cell/2:.6f}) scale({step:.6f})">'
+    for i in range(segments-1, -1, -1):
         fill = "#726789" if i == 0 else "#9e94b3"
-        body += f'<rect class="snake" x="-5" y="-5" width="10" height="10" rx="2" fill="{fill}" opacity="{1-i*.07}"><animateMotion dur="34s" repeatCount="indefinite" path="{path}" begin="{-1-i*.095}s" calcMode="linear"/></rect>'
+        start = head_start+i*spacing*step_time
+        end = start+steps*step_time
+        motion = key_times(0, start, end, 1)
+        fade = key_times(0, start, start+.7*step_time, end-.7*step_time, end, 1)
+        opacity = f'{1-i*.07:.2f}'
+        body += f'<rect x="-.33" y="-.33" width=".66" height=".66" rx=".13" fill="{fill}" opacity="0">'
+        body += f'<animateMotion {clock} calcMode="linear" keyPoints="0;0;1;1" keyTimes="{motion}"><mpath href="#snake-route"/></animateMotion>'
+        body += f'<animate attributeName="opacity" {clock} values="0;0;{opacity};{opacity};0;0" keyTimes="{fade}"/></rect>'
+    body += '</g>'
     body += text(21, h-17, "Keep building, one square at a time.", 9, "var(--muted)")
     body += text(w-124, h-17, "Less", 9, "var(--muted)")
     for i,color in enumerate(PALETTES[theme]["cells"]):
         body += box(w-98+i*10, h-24, 7, 7, color, "none", 1)
     body += text(w-21, h-17, "More", 9, "var(--muted)", "end")
-    styles += '@media(prefers-reduced-motion:reduce){*{animation:none!important}.snake{display:none}}'
+    styles = '@media(prefers-reduced-motion:reduce){.snake{display:none}.contribution{opacity:1!important}}'
     return svg(w, h, body, theme, styles)
 
 
