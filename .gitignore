@@ -1,2 +1,6 @@
 __pycache__/
 *.py[cod]
+.cache/
+design/candidates/
+design/profile/
+design/*.html

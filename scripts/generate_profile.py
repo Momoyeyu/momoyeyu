@@ -268,13 +268,18 @@ def render_snake(data, theme):
 
 
 def write_assets(data):
+    import sys
+    sys.path.insert(0, str(ROOT / "design"))
+    from render_candidates import badge, score
+    from render_profile_draft import github, workspace
+
     dest = ROOT / "assets"
     dest.mkdir(exist_ok=True)
     for theme in PALETTES:
-        for name, value in [("header", render_header(theme)), ("focus", render_focus(theme)), ("stats", render_stats(data, theme)), ("snake", render_snake(data, theme))]:
-            (dest / f'{name}-{theme}.svg').write_text(value+'\n')
-        for slug, mark, label in TOOLS:
-            (dest / f'tool-{slug}-{theme}.svg').write_text(render_tool(theme, mark, label)+'\n')
+        for name, value in [("header", score(theme, "winter-score")), ("workspace", workspace(theme)), ("github", github(data, theme)), ("snake", render_snake(data, theme))]:
+            (dest / f'{name}-{theme}.svg').write_text(value.rstrip('\n')+'\n')
+        for slug, label, value in [("blog", "blog", "文字与碎片"), ("red", "red", "日常手记"), ("bilibili", "bilibili", "墨末夜羽")]:
+            (dest / f'badge-{slug}-{theme}.svg').write_text(badge(slug, label, value, "winter-score", theme).rstrip('\n')+'\n')
 
 
 def main():
